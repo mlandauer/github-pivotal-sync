@@ -6,16 +6,6 @@ require 'json'
 require 'yaml'
 require 'nokogiri'
 
-# First, demonstrate that we can grab all the open issues from GitHub
-
-config = open("configuration.yaml") do |f|
-  YAML.load(f.read)
-end
-
-pivotal_username = config["pivotal"]["username"]
-pivotal_password = config["pivotal"]["password"]
-pivotal_project = config["pivotal"]["project"]
-
 class Issue
   attr_accessor :title, :ids
   def initialize(title, ids)
@@ -42,27 +32,41 @@ class Github
   end
 end
 
+class Pivotal
+  def initialize(config)
+    @username = config["username"]
+    @password = config["password"]
+    @project = config["project"]
+  end
+  
+  def open_issues
+    x = Nokogiri::XML(open("https://www.pivotaltracker.com/services/v3/tokens/active",
+      :http_basic_authentication => [@username, @password]))
+    token = x.at('guid').inner_text
+
+    x = Nokogiri::XML(open("https://www.pivotaltracker.com/services/v3/projects", "X-TrackerToken" => token))
+    project_id = x.search('project').find {|p| p.at('name').inner_text == @project}.at('id').inner_text
+
+    x = Nokogiri::XML(open("https://www.pivotaltracker.com/services/v3/projects/#{project_id}/stories", "X-TrackerToken" => token))
+
+    x.search('story').map do |s|
+      Issue.new(s.at('name').inner_text, :pivotal => s.at('id').inner_text)
+    end
+  end
+end
+
+config = open("configuration.yaml") do |f|
+  YAML.load(f.read)
+end
+
 g = Github.new(config["github"])
+p = Pivotal.new(config["pivotal"])
 
 puts "GitHub issues:"
 g.open_issues.each do |i|
   puts "id: #{i.ids[:github]}, title: #{i.title}"
 end
-
-# Next, demonstrate that we can grab all the open stories from Pivotal Tracker
-
-x = Nokogiri::XML(open("https://www.pivotaltracker.com/services/v3/tokens/active",
-  :http_basic_authentication => [pivotal_username, pivotal_password]))
-token = x.at('guid').inner_text
-
-x = Nokogiri::XML(open("https://www.pivotaltracker.com/services/v3/projects", "X-TrackerToken" => token))
-project_id = x.search('project').find {|p| p.at('name').inner_text == pivotal_project}.at('id').inner_text
-
-x = Nokogiri::XML(open("https://www.pivotaltracker.com/services/v3/projects/#{project_id}/stories", "X-TrackerToken" => token))
-
 puts "Pivotal Stories:"
-x.search('story').each do |s|
-  id = s.at('id').inner_text
-  name = s.at('name').inner_text
-  puts "id: #{id}, title: #{name}"
+p.open_issues.each do |i|
+  puts "id: #{i.ids[:pivotal]}, title: #{i.title}"
 end
