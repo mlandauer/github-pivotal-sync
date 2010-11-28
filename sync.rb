@@ -126,21 +126,26 @@ if File.exist?("issue-sync-store.yaml")
   store.each do |store_issue|
     github_issue = github_issues.find {|i| i.github_id == store_issue.github_id}
     pivotal_issue = pivotal_issues.find {|i| i.pivotal_id == store_issue.pivotal_id}
-    github_changed = (store_issue.title != github_issue.title)
-    pivotal_changed = (store_issue.title != pivotal_issue.title)
-    if github_changed && pivotal_changed
-      puts "Warning: The issue with the title '#{store_issue.title} was changed to '#{github_issue.title}' on GitHub and '#{pivotal_issue}' on Pivotal Tracker. As both of them were changed we can't sync the changes"
+    if github_issue.nil? || pivotal_issue.nil?
+      # The issue has been deleted. Keep the issue in the sync store to ensure that it doesn't get recreated
       synched << store_issue
-    elsif github_changed
-      puts "On pivotal need to change issue #{store_issue.pivotal_id} from '#{store_issue.title}' to '#{github_issue.title}'"
-      p.edit_issue(store_issue.pivotal_id, github_issue.title)
-      synched << Issue.new(github_issue.title, store_issue.github_id, store_issue.pivotal_id)
-    elsif pivotal_changed
-      puts "On github need to change issue #{store_issue.github_id} from '#{store_issue.title}' to '#{pivotal_issue.title}'"
-      g.edit_issue(store_issue.github_id, pivotal_issue.title)
-      synched << Issue.new(pivotal_issue.title, store_issue.github_id, store_issue.pivotal_id)
     else
-      synched << store_issue
+      github_changed = (store_issue.title != github_issue.title)
+      pivotal_changed = (store_issue.title != pivotal_issue.title)
+      if github_changed && pivotal_changed
+        puts "Warning: The issue with the title '#{store_issue.title} was changed to '#{github_issue.title}' on GitHub and '#{pivotal_issue}' on Pivotal Tracker. As both of them were changed we can't sync the changes"
+        synched << store_issue
+      elsif github_changed
+        puts "On pivotal need to change issue #{store_issue.pivotal_id} from '#{store_issue.title}' to '#{github_issue.title}'"
+        p.edit_issue(store_issue.pivotal_id, github_issue.title)
+        synched << Issue.new(github_issue.title, store_issue.github_id, store_issue.pivotal_id)
+      elsif pivotal_changed
+        puts "On github need to change issue #{store_issue.github_id} from '#{store_issue.title}' to '#{pivotal_issue.title}'"
+        g.edit_issue(store_issue.github_id, pivotal_issue.title)
+        synched << Issue.new(pivotal_issue.title, store_issue.github_id, store_issue.pivotal_id)
+      else
+        synched << store_issue
+      end
     end
     github_issues.delete_if {|i| i.github_id == store_issue.github_id}
     pivotal_issues.delete_if {|i| i.pivotal_id == store_issue.pivotal_id}
