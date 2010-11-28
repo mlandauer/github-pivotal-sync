@@ -7,9 +7,9 @@ require 'yaml'
 require 'nokogiri'
 
 class Issue
-  attr_accessor :title, :ids
-  def initialize(title, ids)
-    @title, @ids = title, ids
+  attr_accessor :title, :github_id, :pivotal_id
+  def initialize(title, github_id, pivotal_id)
+    @title, @github_id, @pivotal_id = title, github_id, pivotal_id
   end
 end
 
@@ -27,7 +27,7 @@ class Github
     end
 
     github["issues"].map do |issue|
-      Issue.new(issue["title"], :github => issue["number"])
+      Issue.new(issue["title"], issue["number"], nil)
     end
   end
 end
@@ -45,7 +45,7 @@ class Pivotal
   
   def open_issues
     api_v3("projects/#{@project_id}/stories").search('story').map do |s|
-      Issue.new(s.at('name').inner_text, :pivotal => s.at('id').inner_text)
+      Issue.new(s.at('name').inner_text, nil, s.at('id').inner_text)
     end
   end
   
@@ -63,9 +63,9 @@ p = Pivotal.new(config["pivotal"])
 
 puts "GitHub issues:"
 g.open_issues.each do |i|
-  puts "id: #{i.ids[:github]}, title: #{i.title}"
+  puts "id: #{i.github_id}, title: #{i.title}"
 end
 puts "Pivotal Stories:"
 p.open_issues.each do |i|
-  puts "id: #{i.ids[:pivotal]}, title: #{i.title}"
+  puts "id: #{i.pivotal_id}, title: #{i.title}"
 end
