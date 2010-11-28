@@ -1,0 +1,9 @@
+# Copy this example file to configuration.yaml and edit with your settings
+
+github:
+  # Your username
+  username: user
+  # Your API token. DON'T commit this to version control
+  api_token: 12345678901234567890123456789012
+  # Needs to be of the form <username>/<repository name>
+  repository: user/repo
