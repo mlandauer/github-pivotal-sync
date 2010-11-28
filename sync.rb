@@ -70,6 +70,15 @@ class Pivotal
   end
 end
 
+# Given an array of values return the first found value that appears multiple times
+# If no duplicates are found return nil
+def first_duplicate(a)
+  a.uniq.each do |i|
+    return i if a.select {|j| i == j}.count > 1
+  end
+  nil
+end
+
 config = open("configuration.yaml") do |f|
   YAML.load(f.read)
 end
@@ -81,6 +90,19 @@ puts "Getting GitHub issues..."
 github_issues = g.open_issues
 puts "Getting Pivotal Tracker stories..."
 pivotal_issues = p.open_issues
+
+puts "Checking for duplicate titles..."
+# First check that there are no tickets with duplicate titles
+duplicate_title = first_duplicate(github_issues.map{|i| i.title})
+if duplicate_title
+  puts "Warning: There are multiple GitHub issues with the same title: #{duplicate_title}. Please merge them manually into one and rerun the sync."
+  exit
+end 
+duplicate_title = first_duplicate(pivotal_issues.map{|i| i.title})
+if duplicate_title
+  puts "Warning: There are multiple Pivotal Tracker stories with the same title: #{duplicate_title}. Please merge them manually into one and rerun the sync."
+  exit
+end 
 
 # First we proceed as if there has been no previous sync. So, then we have no record of which id's on Github correspond to which id's
 # on Pivotal
