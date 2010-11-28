@@ -44,6 +44,14 @@ class Github
     RestClient.post("https://github.com/api/v2/yaml/issues/edit/#{@repository}/#{id}", :login => @username,
       :token => @api_token, :title => title)
   end
+  
+  def system_name
+    "GitHub"
+  end
+  
+  def issues_name
+    "GitHub issues"
+  end
 end
 
 class Pivotal
@@ -58,7 +66,7 @@ class Pivotal
   end
   
   def open_issues
-    api_v3("projects/#{@project_id}/stories").search('story').map do |s|
+    @open_issues ||= api_v3("projects/#{@project_id}/stories").search('story').map do |s|
       Issue.new(s.at('name').inner_text, nil, s.at('id').inner_text)
     end
   end
@@ -79,6 +87,14 @@ class Pivotal
     RestClient.put("https://www.pivotaltracker.com/services/v3/projects/#{@project_id}/stories/#{id}", {:story => {:name => title}},
       "X-TrackerToken" => @token)
   end
+  
+  def system_name
+    "Pivotal Tracker"
+  end
+  
+  def issues_name
+    "Pivotal Tracker Stories"
+  end
 end
 
 # Given an array of values return the first found value that appears multiple times
@@ -96,24 +112,22 @@ end
 
 g = Github.new(config["github"])
 p = Pivotal.new(config["pivotal"])
+s = [g, p]
 
-puts "Getting GitHub issues..."
+s.each do |r|
+  puts "Getting #{r.issues_name}..."
+  r.open_issues
+
+  puts "Checking for duplicate titles..."
+  duplicate_title = first_duplicate(r.open_issues.map{|i| i.title})
+  if duplicate_title
+    puts "Warning: There are multiple #{r.issues_name} with the same title: #{duplicate_title}. Please merge them manually into one and rerun the sync."
+    exit
+  end 
+end
+
 github_issues = g.open_issues
-puts "Getting Pivotal Tracker stories..."
 pivotal_issues = p.open_issues
-
-puts "Checking for duplicate titles..."
-# First check that there are no tickets with duplicate titles
-duplicate_title = first_duplicate(github_issues.map{|i| i.title})
-if duplicate_title
-  puts "Warning: There are multiple GitHub issues with the same title: #{duplicate_title}. Please merge them manually into one and rerun the sync."
-  exit
-end 
-duplicate_title = first_duplicate(pivotal_issues.map{|i| i.title})
-if duplicate_title
-  puts "Warning: There are multiple Pivotal Tracker stories with the same title: #{duplicate_title}. Please merge them manually into one and rerun the sync."
-  exit
-end 
 
 synched = []
 
@@ -133,7 +147,7 @@ if File.exist?("issue-sync-store.yaml")
       github_changed = (store_issue.title != github_issue.title)
       pivotal_changed = (store_issue.title != pivotal_issue.title)
       if github_changed && pivotal_changed
-        puts "Warning: The issue with the title '#{store_issue.title} was changed to '#{github_issue.title}' on GitHub and '#{pivotal_issue}' on Pivotal Tracker. As both of them were changed we can't sync the changes"
+        puts "Warning: The issue with the title '#{store_issue.title} was changed to '#{github_issue.title}' on #{g.system_name} and '#{pivotal_issue}' on #{p.system_name}. As both of them were changed we can't sync the changes"
         synched << store_issue
       elsif github_changed
         puts "On pivotal need to change issue #{store_issue.pivotal_id} from '#{store_issue.title}' to '#{github_issue.title}'"
@@ -165,13 +179,13 @@ matching_titles.each do |t|
 end
 
 # Now, remaining tickets in the github list need to be added to pivotal and vice versa
-puts "Adding new stories to Pivotal Tracker..." unless github_issues.empty?
+puts "Adding new #{p.issues_name}..." unless github_issues.empty?
 github_issues.each do |i|
   pivotal_id = p.new_issue(i.title)
   synched << Issue.new(i.title, i.github_id, pivotal_id)
 end
 
-puts "Adding new issues to GitHub..." unless pivotal_issues.empty?
+puts "Adding new #{g.issues_name}..." unless pivotal_issues.empty?
 pivotal_issues.each do |i|
   github_id = g.new_issue(i.title)
   synched << Issue.new(i.title, github_id, i.pivotal_id)
