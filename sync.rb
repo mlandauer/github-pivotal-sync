@@ -12,23 +12,41 @@ config = open("configuration.yaml") do |f|
   YAML.load(f.read)
 end
 
-github_username = config["github"]["username"]
-github_api_token = config["github"]["api_token"]
-github_repository = config["github"]["repository"]
 pivotal_username = config["pivotal"]["username"]
 pivotal_password = config["pivotal"]["password"]
 pivotal_project = config["pivotal"]["project"]
 
-github = open("https://github.com/api/v2/json/issues/list/#{github_repository}/open",
-  :http_basic_authentication=>["#{github_username}/token", github_api_token]) do |f|
-  JSON.parse(f.read)
+class Issue
+  attr_accessor :title, :ids
+  def initialize(title, ids)
+    @title, @ids = title, ids
+  end
 end
 
+class Github
+  def initialize(config)
+    @username = config["username"]
+    @api_token = config["api_token"]
+    @repository = config["repository"]
+  end
+  
+  def open_issues
+    github = open("https://github.com/api/v2/json/issues/list/#{@repository}/open",
+      :http_basic_authentication=>["#{@username}/token", @api_token]) do |f|
+      JSON.parse(f.read)
+    end
+
+    github["issues"].map do |issue|
+      Issue.new(issue["title"], :github => issue["number"])
+    end
+  end
+end
+
+g = Github.new(config["github"])
+
 puts "GitHub issues:"
-github["issues"].each do |issue|
-  number = issue["number"]
-  title = issue["title"]
-  puts "id: #{number}, title: #{title}"
+g.open_issues.each do |i|
+  puts "id: #{i.ids[:github]}, title: #{i.title}"
 end
 
 # Next, demonstrate that we can grab all the open stories from Pivotal Tracker
