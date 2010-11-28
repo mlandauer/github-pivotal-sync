@@ -38,6 +38,12 @@ class Github
       :token => @api_token, :title => title))
     result["issue"]["number"]
   end
+  
+  # issues/edit/:user/:repo/:number
+  def edit_issue(id, title)
+    RestClient.post("https://github.com/api/v2/yaml/issues/edit/#{@repository}/#{id}", :login => @username,
+      :token => @api_token, :title => title)
+  end
 end
 
 class Pivotal
@@ -67,6 +73,11 @@ class Pivotal
       "<story><name>#{title}</name></story>",
       "X-TrackerToken" => @token, "Content-type" => "application/xml"))
     x.at('id').inner_text
+  end
+  
+  def edit_issue(id, title)
+    RestClient.put("https://www.pivotaltracker.com/services/v3/projects/#{@project_id}/stories/#{id}", {:story => {:name => title}},
+      "X-TrackerToken" => @token)
   end
 end
 
@@ -106,29 +117,57 @@ end
 
 synched = []
 
-# First we proceed as if there has been no previous sync. So, then we have no record of which id's on Github correspond to which id's
-# on Pivotal
+if File.exist?("issue-sync-store.yaml")
+  puts "Reading sync store..."
+  store = File.open("issue-sync-store.yaml") do |f|
+    YAML.load(f.read)
+  end
+  # For each issue in the store see if any of them have changed title
+  store.each do |store_issue|
+    github_issue = github_issues.find {|i| i.github_id == store_issue.github_id}
+    pivotal_issue = pivotal_issues.find {|i| i.pivotal_id == store_issue.pivotal_id}
+    github_changed = (store_issue.title != github_issue.title)
+    pivotal_changed = (store_issue.title != pivotal_issue.title)
+    if github_changed && pivotal_changed
+      puts "Warning: The issue with the title '#{store_issue.title} was changed to '#{github_issue.title}' on GitHub and '#{pivotal_issue}' on Pivotal Tracker. As both of them were changed we can't sync the changes"
+      synched << store_issue
+    elsif github_changed
+      puts "On pivotal need to change issue #{store_issue.pivotal_id} from '#{store_issue.title}' to '#{github_issue.title}'"
+      p.edit_issue(store_issue.pivotal_id, github_issue.title)
+      synched << Issue.new(github_issue.title, store_issue.github_id, store_issue.pivotal_id)
+    elsif pivotal_changed
+      puts "On github need to change issue #{store_issue.github_id} from '#{store_issue.title}' to '#{pivotal_issue.title}'"
+      g.edit_issue(store_issue.github_id, pivotal_issue.title)
+      synched << Issue.new(pivotal_issue.title, store_issue.github_id, store_issue.pivotal_id)
+    else
+      synched << store_issue
+    end
+  end
+else
+  # First we proceed as if there has been no previous sync. So, then we have no record of which id's on Github correspond to which id's
+  # on Pivotal
 
-matching_titles = github_issues.map{|i| i.title} & pivotal_issues.map{|i| i.title}
+  matching_titles = github_issues.map{|i| i.title} & pivotal_issues.map{|i| i.title}
 
-# We assume tickets with matching titles have been synced. So, we remove them from our list to process
-matching_titles.each do |t|
-  synched << Issue.new(t, github_issues.find{|i| i.title == t}.github_id, pivotal_issues.find{|i| i.title == t}.pivotal_id)
-  github_issues.delete_if {|i| i.title == t}
-  pivotal_issues.delete_if {|i| i.title == t}
-end
+  # We assume tickets with matching titles have been synced. So, we remove them from our list to process
+  matching_titles.each do |t|
+    synched << Issue.new(t, github_issues.find{|i| i.title == t}.github_id, pivotal_issues.find{|i| i.title == t}.pivotal_id)
+    github_issues.delete_if {|i| i.title == t}
+    pivotal_issues.delete_if {|i| i.title == t}
+  end
 
-# Now, remaining tickets in the github list need to be added to pivotal and vice versa
-puts "Adding new stories to Pivotal Tracker..." unless github_issues.empty?
-github_issues.each do |i|
-  pivotal_id = p.new_issue(i.title)
-  synched << Issue.new(i.title, i.github_id, pivotal_id)
-end
+  # Now, remaining tickets in the github list need to be added to pivotal and vice versa
+  puts "Adding new stories to Pivotal Tracker..." unless github_issues.empty?
+  github_issues.each do |i|
+    pivotal_id = p.new_issue(i.title)
+    synched << Issue.new(i.title, i.github_id, pivotal_id)
+  end
 
-puts "Adding new issues to GitHub..." unless pivotal_issues.empty?
-pivotal_issues.each do |i|
-  github_id = g.new_issue(i.title)
-  synched << Issue.new(i.title, github_id, i.pivotal_id)
+  puts "Adding new issues to GitHub..." unless pivotal_issues.empty?
+  pivotal_issues.each do |i|
+    github_id = g.new_issue(i.title)
+    synched << Issue.new(i.title, github_id, i.pivotal_id)
+  end
 end
 
 # Write out the issue sync store
@@ -136,4 +175,3 @@ puts "Writing issue sync store..."
 File.open("issue-sync-store.yaml", "w") do |f|
   f.write(YAML.dump(synched))
 end
-
