@@ -10,5 +10,10 @@ Currently issues are only created or edited. They are not deleted. So, closing a
 To install the required gems:
 $ bundle install
 
+To configure:
+$ cp configuration-example.yaml configuration.yaml
+
+You will need to edit the configuration.yaml file with the details of the GitHub account and repository and Pivotal Tracker account and project you will be synching.
+
 To run:
 $ ./sync.rb
