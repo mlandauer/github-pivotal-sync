@@ -5,6 +5,7 @@ require 'rubygems'
 require 'json'
 require 'yaml'
 require 'nokogiri'
+require 'rest_client'
 
 class Issue
   attr_accessor :title, :github_id, :pivotal_id
@@ -52,6 +53,14 @@ class Pivotal
   def api_v3(call)
     Nokogiri::XML(open("https://www.pivotaltracker.com/services/v3/#{call}", "X-TrackerToken" => @token))
   end
+  
+  # Returns id of new issue
+  def new_issue(title)
+    x = Nokogiri::XML(RestClient.post("https://www.pivotaltracker.com/services/v3/projects/#{@project_id}/stories",
+      "<story><name>#{title}</name></story>",
+      "X-TrackerToken" => @token, "Content-type" => "application/xml"))
+    x.at('id').inner_text
+  end
 end
 
 config = open("configuration.yaml") do |f|
@@ -61,11 +70,24 @@ end
 g = Github.new(config["github"])
 p = Pivotal.new(config["pivotal"])
 
-puts "GitHub issues:"
-g.open_issues.each do |i|
-  puts "id: #{i.github_id}, title: #{i.title}"
+puts "Getting GitHub issues..."
+github_issues = g.open_issues
+puts "Getting Pivotal Tracker stories..."
+pivotal_issues = p.open_issues
+
+# First we proceed as if there has been no previous sync. So, then we have no record of which id's on Github correspond to which id's
+# on Pivotal
+
+matching_titles = github_issues.map{|i| i.title} & pivotal_issues.map{|i| i.title}
+
+# We assume tickets with matching titles have been synced. So, we remove them from our list to process
+matching_titles.each do |t|
+  github_issues.delete_if {|i| i.title == t}
+  pivotal_issues.delete_if {|i| i.title == t}
 end
-puts "Pivotal Stories:"
-p.open_issues.each do |i|
-  puts "id: #{i.pivotal_id}, title: #{i.title}"
+
+puts "Adding new stories to Pivotal Tracker..." unless github_issues.empty?
+# Now, remaining tickets in the github list need to be added to pivotal and vice versa
+github_issues.each do |i|
+  p.new_issue(i.title)
 end
