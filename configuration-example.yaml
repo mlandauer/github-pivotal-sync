@@ -7,3 +7,9 @@ github:
   api_token: 12345678901234567890123456789012
   # Needs to be of the form <username>/<repository name>
   repository: user/repo
+
+pivotal:  
+  username: user
+  password: foobar
+  # This needs to be named exactly as it is in Pivotal Tracker
+  project: "A project name"
