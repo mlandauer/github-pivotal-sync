@@ -37,21 +37,20 @@ class Pivotal
     @username = config["username"]
     @password = config["password"]
     @project = config["project"]
+    
+    @token = Nokogiri::XML(open("https://www.pivotaltracker.com/services/v3/tokens/active",
+      :http_basic_authentication => [@username, @password])).at('guid').inner_text
+    @project_id = api_v3("projects").search('project').find {|p| p.at('name').inner_text == @project}.at('id').inner_text
   end
   
   def open_issues
-    x = Nokogiri::XML(open("https://www.pivotaltracker.com/services/v3/tokens/active",
-      :http_basic_authentication => [@username, @password]))
-    token = x.at('guid').inner_text
-
-    x = Nokogiri::XML(open("https://www.pivotaltracker.com/services/v3/projects", "X-TrackerToken" => token))
-    project_id = x.search('project').find {|p| p.at('name').inner_text == @project}.at('id').inner_text
-
-    x = Nokogiri::XML(open("https://www.pivotaltracker.com/services/v3/projects/#{project_id}/stories", "X-TrackerToken" => token))
-
-    x.search('story').map do |s|
+    api_v3("projects/#{@project_id}/stories").search('story').map do |s|
       Issue.new(s.at('name').inner_text, :pivotal => s.at('id').inner_text)
     end
+  end
+  
+  def api_v3(call)
+    Nokogiri::XML(open("https://www.pivotaltracker.com/services/v3/#{call}", "X-TrackerToken" => @token))
   end
 end
 
