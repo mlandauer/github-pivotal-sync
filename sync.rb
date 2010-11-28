@@ -32,9 +32,11 @@ class Github
     end
   end
   
+  # Returns number of new issue
   def new_issue(title)
-    RestClient.post("https://github.com/api/v2/yaml/issues/open/#{@repository}", :login => @username,
-      :token => @api_token, :title => title) 
+    result = YAML.load(RestClient.post("https://github.com/api/v2/yaml/issues/open/#{@repository}", :login => @username,
+      :token => @api_token, :title => title))
+    result["issue"]["number"]
   end
 end
 
