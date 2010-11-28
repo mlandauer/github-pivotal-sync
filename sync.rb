@@ -31,6 +31,11 @@ class Github
       Issue.new(issue["title"], issue["number"], nil)
     end
   end
+  
+  def new_issue(title)
+    RestClient.post("https://github.com/api/v2/yaml/issues/open/#{@repository}", :login => @username,
+      :token => @api_token, :title => title) 
+  end
 end
 
 class Pivotal
@@ -86,8 +91,13 @@ matching_titles.each do |t|
   pivotal_issues.delete_if {|i| i.title == t}
 end
 
-puts "Adding new stories to Pivotal Tracker..." unless github_issues.empty?
 # Now, remaining tickets in the github list need to be added to pivotal and vice versa
+puts "Adding new stories to Pivotal Tracker..." unless github_issues.empty?
 github_issues.each do |i|
   p.new_issue(i.title)
+end
+
+puts "Adding new issues to GitHub..." unless pivotal_issues.empty?
+pivotal_issues.each do |i|
+  g.new_issue(i.title)
 end
