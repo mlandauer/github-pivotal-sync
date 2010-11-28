@@ -104,6 +104,8 @@ if duplicate_title
   exit
 end 
 
+synched = []
+
 # First we proceed as if there has been no previous sync. So, then we have no record of which id's on Github correspond to which id's
 # on Pivotal
 
@@ -111,6 +113,7 @@ matching_titles = github_issues.map{|i| i.title} & pivotal_issues.map{|i| i.titl
 
 # We assume tickets with matching titles have been synced. So, we remove them from our list to process
 matching_titles.each do |t|
+  synched << Issue.new(t, github_issues.find{|i| i.title == t}.github_id, pivotal_issues.find{|i| i.title == t}.pivotal_id)
   github_issues.delete_if {|i| i.title == t}
   pivotal_issues.delete_if {|i| i.title == t}
 end
@@ -118,10 +121,19 @@ end
 # Now, remaining tickets in the github list need to be added to pivotal and vice versa
 puts "Adding new stories to Pivotal Tracker..." unless github_issues.empty?
 github_issues.each do |i|
-  p.new_issue(i.title)
+  pivotal_id = p.new_issue(i.title)
+  synched << Issue.new(i.title, i.github_id, pivotal_id)
 end
 
 puts "Adding new issues to GitHub..." unless pivotal_issues.empty?
 pivotal_issues.each do |i|
-  g.new_issue(i.title)
+  github_id = g.new_issue(i.title)
+  synched << Issue.new(i.title, github_id, i.pivotal_id)
 end
+
+# Write out the issue sync store
+puts "Writing issue sync store..."
+File.open("issue-sync-store.yaml", "w") do |f|
+  f.write(YAML.dump(synched))
+end
+
