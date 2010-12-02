@@ -22,7 +22,7 @@ class Sync
     end
   end
 
-  def sync
+  def sync_using_store(store)
     puts "Checking for duplicate titles..."
     s.each do |r|
       duplicate_title = first_duplicate(r.open_issues.map{|i| i.title})
@@ -33,8 +33,6 @@ class Sync
     end
     
     synched = []
-    
-    store = read_issue_sync_store
     
     # For each issue in the store see if any of them have changed title
     store.each do |store_issue|
@@ -114,7 +112,11 @@ class Sync
       end
     end
     
-    write_issue_sync_store(synched)
+    synched
+   end
+
+  def sync
+    write_issue_sync_store(sync_using_store(read_issue_sync_store))
   end
   
   # Given an array of values return the first found value that appears multiple times
