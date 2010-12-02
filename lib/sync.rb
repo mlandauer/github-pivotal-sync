@@ -5,19 +5,21 @@ class Sync
     @s = s
   end
   
-  # Given an array of values return the first found value that appears multiple times
-  # If no duplicates are found return nil
-  def first_duplicate(a)
-    a.uniq.each do |i|
-      return i if a.select {|j| i == j}.count > 1
+  def read_issue_sync_store
+    if File.exist?("issue-sync-store.yaml")
+      puts "Reading sync store..."
+      File.open("issue-sync-store.yaml") {|f| YAML.load(f.read)}
+    else
+      # If the sync store can't be found return an empty one
+      []        
     end
-    nil
   end
   
-  # Returns an array of all the duplicate values in an array
-  # e.g. [1, 2, 3, 1, 4, 5, 6, 3, 7] => [1, 3]
-  def all_duplicates(a)
-    a.uniq.select{|v| a.select{|b| b == v}.count > 1}
+  def write_issue_sync_store(synched)
+    puts "Writing issue sync store..."
+    File.open("issue-sync-store.yaml", "w") do |f|
+      f.write(YAML.dump(synched))
+    end
   end
 
   def sync
@@ -32,51 +34,48 @@ class Sync
     
     synched = []
     
-    if File.exist?("issue-sync-store.yaml")
-      puts "Reading sync store..."
-      store = File.open("issue-sync-store.yaml") do |f|
-        YAML.load(f.read)
-      end
-      # For each issue in the store see if any of them have changed title
-      store.each do |store_issue|
-        issues = s.map {|t| t.find_issue_to_be_synched(store_issue.ids[t.tag])}
-        
-        # If some of the issues couldn't be found - i.e. have been deleted in the meantime
-        if issues.compact != issues
-          # The issue has been deleted. Keep the issue in the sync store to ensure that it doesn't get recreated
-          synched << store_issue
-        else
-          issues_changed = issues.map{|i| store_issue.title != i.title}
+    store = read_issue_sync_store
     
-          if issues_changed.select{|b| b}.count > 1
-            puts "Warning: The issue with the title '#{store_issue.title}' was changed in more than one place to different values:"
-            s.each do |t|
-              issue = t.find_issue_to_be_synched(store_issue.ids[t.tag])
-              puts "  On #{t.system_name} it was changed to '#{issue.title}'" if issue.title != store_issue.title
-            end
-            puts "  That means that unfortunately we can't sync the changes automatically"
-            synched << store_issue
-          elsif issues_changed.select{|b| b}.count == 1
-            s.each do |t|
-              issue = t.find_issue_to_be_synched(store_issue.ids[t.tag])
-              if issue.title != store_issue.title
-                # Update the title on the other systems
-                (s - [t]).each do |repo|
-                  puts "On #{repo.system_name} changing issue #{store_issue.ids[repo.tag]} from '#{store_issue.title}' to '#{issue.title}'"
-                  repo.edit_issue(store_issue.ids[repo.tag], issue.title)
-                  synched << SynchedIssue.new(issue.title, store_issue.ids)
-                end
+    # For each issue in the store see if any of them have changed title
+    store.each do |store_issue|
+      issues = s.map {|t| t.find_issue_to_be_synched(store_issue.ids[t.tag])}
+      
+      # If some of the issues couldn't be found - i.e. have been deleted in the meantime
+      if issues.compact != issues
+        # The issue has been deleted. Keep the issue in the sync store to ensure that it doesn't get recreated
+        synched << store_issue
+      else
+        issues_changed = issues.map{|i| store_issue.title != i.title}
+  
+        if issues_changed.select{|b| b}.count > 1
+          puts "Warning: The issue with the title '#{store_issue.title}' was changed in more than one place to different values:"
+          s.each do |t|
+            issue = t.find_issue_to_be_synched(store_issue.ids[t.tag])
+            puts "  On #{t.system_name} it was changed to '#{issue.title}'" if issue.title != store_issue.title
+          end
+          puts "  That means that unfortunately we can't sync the changes automatically"
+          synched << store_issue
+        elsif issues_changed.select{|b| b}.count == 1
+          s.each do |t|
+            issue = t.find_issue_to_be_synched(store_issue.ids[t.tag])
+            if issue.title != store_issue.title
+              # Update the title on the other systems
+              (s - [t]).each do |repo|
+                puts "On #{repo.system_name} changing issue #{store_issue.ids[repo.tag]} from '#{store_issue.title}' to '#{issue.title}'"
+                repo.edit_issue(store_issue.ids[repo.tag], issue.title)
+                synched << SynchedIssue.new(issue.title, store_issue.ids)
               end
             end
-          else
-            synched << store_issue
           end
-        end
-        s.each do |t|
-          t.mark_as_synched(store_issue.ids[t.tag])
+        else
+          synched << store_issue
         end
       end
+      s.each do |t|
+        t.mark_as_synched(store_issue.ids[t.tag])
+      end
     end
+
     
     # Any issues we see from here on we don't know anything about. i.e. we haven't seen them before and we haven't stored their
     # id's in the sync store
@@ -115,10 +114,21 @@ class Sync
       end
     end
     
-    # Write out the issue sync store
-    puts "Writing issue sync store..."
-    File.open("issue-sync-store.yaml", "w") do |f|
-      f.write(YAML.dump(synched))
+    write_issue_sync_store(synched)
+  end
+  
+  # Given an array of values return the first found value that appears multiple times
+  # If no duplicates are found return nil
+  def first_duplicate(a)
+    a.uniq.each do |i|
+      return i if a.select {|j| i == j}.count > 1
     end
+    nil
+  end
+  
+  # Returns an array of all the duplicate values in an array
+  # e.g. [1, 2, 3, 1, 4, 5, 6, 3, 7] => [1, 3]
+  def all_duplicates(a)
+    a.uniq.select{|v| a.select{|b| b == v}.count > 1}
   end
 end
