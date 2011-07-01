@@ -24,7 +24,7 @@ class Pivotal < Repo
   # Returns id of new issue
   def new_issue(title)
     x = Nokogiri::XML(RestClient.post("https://www.pivotaltracker.com/services/v3/projects/#{@project_id}/stories",
-      "<story><name>#{title}</name></story>",
+      "<story><name>#{CGI.escapeHTML(title)}</name></story>",
       "X-TrackerToken" => @token, "Content-type" => "application/xml"))
     x.at('id').inner_text
   end
